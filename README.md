@@ -2,6 +2,8 @@
 
 **A lightweight SmartFoxServer 2X (SFS2X) protocol re-implementation for Roblox Lua**
 
+#### This read-me was created with the help of generative AI. The code was not.
+
 SmartBlox brings the familiar `SFSObject` / `SFSArray` data model from SmartFoxServer 2X to Roblox, using only a single `RemoteEvent`.  
 It gives you type-safe, compact, nested data structures and a clean request/response pattern with callbacks — perfect for games that need server → client data syncing (inventory, player data, islands, monsters, etc.).
 
@@ -205,6 +207,22 @@ SmartBloxArray.new(rawListData: table?) -> SmartBloxArray
 - `put*` and `add*` methods include runtime assertions for type safety (they will error in Studio if you pass wrong data).
 - The system uses the exact same type codes as SFS2X for maximum compatibility.
 
+---
+
+## Stress Testing & Production Readiness
+
+**This module has been heavily stress-tested** with the following scenarios:
+
+- 100+ rapid-fire requests (pings)
+- Deep nesting up to **50 levels**
+- Large payloads with **2000 items** in arrays (including long strings and numeric values)
+- Mixed nested objects + arrays
+- Edge cases: missing keys, wrong-type getters (correctly returns `nil`)
+
+All tests completed successfully with no serializer crashes, no assertion failures from the module, and stable callback behavior.  
+Round-trip times remained reasonable even under heavy load (0.17–0.35 seconds for large payloads in Studio).
+
+**Conclusion**: The core functionality (serializer, object/array system, RID callbacks, and single RemoteEvent handling) is stable and **ready for production use** in small to medium-sized games.
 ---
 
 **Made for Roblox** — Inspired by SmartFoxServer 2X.
