@@ -1,41 +1,43 @@
+
 # SmartBlox
 
 **A lightweight SmartFoxServer 2X (SFS2X) protocol re-implementation for Roblox Lua**
 
-#### This read-me was created with the help of generative AI. The code was not.
-
-SmartBlox brings the familiar `SFSObject` / `SFSArray` data model from SmartFoxServer 2X to Roblox, using only a single `RemoteEvent`.  
-It gives you type-safe, compact, nested data structures and a clean request/response pattern with callbacks — perfect for games that need server → client data syncing (inventory, player data, islands, monsters, etc.).
+SmartBlox brings the full SFSObject / SFSArray data model from SmartFoxServer 2X to Roblox using a single `RemoteEvent`. It provides type-safe, compact, deeply nested structures, automatic request/response callbacks, built-in user login & variable synchronization, and expanded array support — perfect for inventory, player data, islands, monsters, matchmaking, and any server ↔ client data syncing.
 
 ---
 
 ## Features
 
-- Full `SFSObject` and `SFSArray` API (matching SFS2X naming)
-- Automatic RID-based request/response callbacks
-- Nested objects and arrays supported
-- Serializer that handles packing/unpacking for the RemoteEvent
+- Full SFSObject and SFSArray API (exact SFS2X naming & behavior)
+- **Expanded primitive array types**: `BoolArray`, `ByteArray`, `ShortArray`, `LongArray`, `FloatArray`, `DoubleArray`, `IntArray`, `UtfStringArray`
+- Automatic RID-based request/response callbacks (hidden from user)
+- Deeply nested objects and arrays (fully supported)
+- Built-in **User login system** with `USER_LOGIN` / `USER_DISCONNECT` / `SYNC_USERS`
+- User variable system with public/private sync (real-time updates to clients)
+- Serializer that packs/unpacks everything for the `RemoteEvent`
 - Zero external dependencies (pure Roblox Lua)
 - Debug logging built-in
-- Server and Client modules clearly separated
+- Server and Client modules cleanly separated
+- Production-ready (heavily stress-tested with 100+ requests, 50-level nesting, 2000+ item arrays)
 
 ---
 
 ## Installation
 
-1. Put the entire `SmartBlox` folder in `ReplicatedStorage`.
+1. Place the entire **SmartBlox** folder in `ReplicatedStorage`.
 2. On the **Server** (in a Script):
 
 ```lua
 local SmartBloxServer = require(ReplicatedStorage.SmartBlox.SmartBloxServer)
-SmartBloxServer.Init()
+SmartBloxServer.Init() -- optionally pass settings table
 ```
 
 3. On the **Client** (in a LocalScript):
 
 ```lua
 local SmartBloxClient = require(ReplicatedStorage.SmartBlox.SmartBloxClient)
-SmartBloxClient.Init() -- or SmartBloxClient.Init(true) for debug
+SmartBloxClient.Init() -- or SmartBloxClient.Init(true) for extra debug prints
 ```
 
 `SmartBloxServer.Init()` automatically creates the `SmartBloxEvent` RemoteEvent in ReplicatedStorage.
@@ -44,30 +46,137 @@ SmartBloxClient.Init() -- or SmartBloxClient.Init(true) for debug
 
 ## Quick Start Example
 
-**Server** (`db_island` handler):
+### Server (in a Script)
 
 ```lua
-SmartBloxServer:addRequestHandler("db_island", function(player, params)
-    local islandsArray = SmartBloxArray.new()
+local SmartBloxServer = require(ReplicatedStorage.SmartBlox.SmartBloxServer)
+local SmartBloxObject = require(ReplicatedStorage.SmartBlox.Types.SmartBloxObject)
+local SmartBloxArray = require(ReplicatedStorage.SmartBlox.Types.SmartBloxArray)
+local SmartBloxEvent = require(ReplicatedStorage.SmartBlox.Types.Enums.SmartBloxEvent)
 
+SmartBloxServer.Init()
+
+-- Login handler (required for authentication)
+SmartBloxServer:addRequestHandler(SmartBloxEvent.USER_LOGIN, function(player: Player, params: SmartBloxObject)
+    print(player.Name .. " is attempting login")
+    local secretCode = params:getUtfString("secretCode")
+    if secretCode ~= "ABCDEF123" then
+        warn(player.Name .. " login failed")
+        return false -- kicks the player
+    end
+    return true -- success, user object will be created
+end)
+
+-- Normal command handler (receives User object)
+SmartBloxServer:addRequestHandler("db_island", function(user, params: SmartBloxObject)
+    print(user.Player.Name .. " requested islands")
+
+    local islandsArray = SmartBloxArray.new()
     local islandObj = SmartBloxObject.new()
     islandObj:putInt("island_id", 1)
+    islandObj:putUtfString("name", "Starter Island")
     islandsArray:addSFSObject(islandObj)
 
     local response = SmartBloxObject.new()
     response:putSFSArray("islands", islandsArray)
-
     return response
+end)
+
+-- Optional: handle user disconnect
+SmartBloxServer:addRequestHandler(SmartBloxEvent.USER_DISCONNECT, function(user)
+    print(user.Player.Name .. " disconnected")
 end)
 ```
 
-**Client**:
+### Client (in a LocalScript)
 
 ```lua
-SmartBloxClient:send("db_island", SmartBloxObject.new(), function(response)
+local SmartBloxClient = require(ReplicatedStorage.SmartBlox.SmartBloxClient)
+local SmartBloxObject = require(ReplicatedStorage.SmartBlox.Types.SmartBloxObject)
+
+SmartBloxClient.Init()
+
+-- Login first (required)
+local loginParams = SmartBloxObject.new()
+loginParams:putUtfString("secretCode", "ABCDEF123")
+SmartBloxClient:login(loginParams)
+
+-- Send request with callback
+SmartBloxClient:send("db_island", SmartBloxObject.new(), function(response: SmartBloxObject)
     local islands = response:getSFSArray("islands")
-    local firstIsland = islands:get(1)
-    print(firstIsland:getInt("island_id")) -- 1
+    local first = islands:getSFSObject(1)
+    print(first:getInt("island_id")) -- 1
+    print(first:getUtfString("name")) -- Starter Island
+end)
+```
+
+---
+
+## Additional Type Examples
+
+### Using Array types
+
+```lua
+local arr = SmartBloxArray.new()
+
+arr:addBool(true)
+arr:addByte(127)
+arr:addShort(32000)
+arr:addInt(2147483647)
+arr:addLong(9007199254740991)
+arr:addFloat(3.14159)
+arr:addDouble(3.141592653589793)
+arr:addUtfString("hello")
+arr:addText("long text string")
+
+-- Primitive arrays
+arr:addBoolArray({true, false, true})
+arr:addByteArray({1, 2, 3})
+arr:addIntArray({10, 20, 30})
+arr:addUtfStringArray({"a", "b", "c"})
+
+-- Nested
+local nestedObj = SmartBloxObject.new()
+nestedObj:putInt("score", 999)
+arr:addSFSObject(nestedObj)
+arr:addSFSArray(SmartBloxArray.new():addInt(42))
+
+print(arr:size()) -- 12+
+```
+
+### Reading mixed data
+
+```lua
+local obj = SmartBloxObject.new()
+obj:putSFSArray("inventory", arr)
+
+local inv = obj:getSFSArray("inventory")
+print(inv:getBool(1))
+print(inv:getIntArray(9)) -- table of numbers
+print(inv:getSFSObject(11):getInt("score"))
+```
+
+### User variables (server)
+
+```lua
+-- Inside any handler that receives `user`
+user:setVariable("score", 150, true)     -- public → all clients get update
+user:setVariable("health", 100, false)   -- private → only this player
+
+local score = user:getVariable("score")
+local all = user:getAllVariables()
+local public = user:getPublicVariables()
+```
+
+### Listening to variable updates (client)
+
+```lua
+SmartBloxClient:addRequestHandler(SmartBloxEvent.USER_VARIABLES_UPDATE, function(response)
+    local userId = response:getInt("userId")
+    local key = response:getUtfString("key")
+    local value = response:getUtfString("value") -- or getInt, getBool, etc.
+    local isPublic = response:getBool("public")
+    print(`User {userId} updated {key} = {value} (public: {isPublic})`)
 end)
 ```
 
@@ -78,15 +187,16 @@ end)
 ### SmartBloxClient (Client only)
 
 #### `SmartBloxClient.Init(debugEnabled: boolean?)`
-Initializes the client and connects to the RemoteEvent.  
-Call this once at the start of your client scripts.
+Initializes the client and connects to `SmartBloxEvent`.
+
+#### `SmartBloxClient:login(loginParams: SmartBloxObject?)`
+Performs login. After success, automatically requests `SYNC_USERS`.
 
 #### `SmartBloxClient:send(command: string, sfsObj: SmartBloxObject, callback: ((response: SmartBloxObject) -> ())?)`
-Sends a request to the server.  
-If a callback is provided, it will be called with the response object when the server replies.
+Sends a request. Callback is called with response when server replies.
 
 #### `SmartBloxClient:addRequestHandler(command: string, handler: (response: SmartBloxObject) -> ())`
-(Advanced) Registers a handler for unsolicited messages from the server.
+Registers handler for unsolicited server messages (e.g. `USER_VARIABLES_UPDATE`).
 
 #### `SmartBloxClient:isConnected(): boolean`
 Returns whether the client is ready.
@@ -95,15 +205,40 @@ Returns whether the client is ready.
 
 ### SmartBloxServer (Server only)
 
-#### `SmartBloxServer.Init()`
-Initializes the server and creates the `SmartBloxEvent` RemoteEvent.
+#### `SmartBloxServer.Init(settings: {UseBuffers: boolean}? )`
+Initializes server and creates `SmartBloxEvent`.
 
-#### `SmartBloxServer:addRequestHandler(command: string, handler: (player: Player, params: SmartBloxObject) -> SmartBloxObject?)`
-Registers a handler for a specific command.  
-The handler receives the player and the request object and should return a response object (or `nil` for no reply).
+#### `SmartBloxServer:addRequestHandler(command: string, handler: (user: User, params: SmartBloxObject) -> SmartBloxObject?)`
+Registers handler. For normal commands, `user` is the `User` object.  
+**Special commands** (`USER_LOGIN`, `USER_DISCONNECT`) use slightly different signatures (see Quick Start).
 
 #### `SmartBloxServer:send(command: string, sfsObj: SmartBloxObject, target: Player)`
-(Internal) Sends a message to a specific client. Usually not called directly.
+Sends message to a specific client (internal use).
+
+#### `SmartBloxServer:getClientFromPlayer(player: Player): User?`
+Returns the `User` wrapper for a player.
+
+#### `SmartBloxServer:getClientFromUserId(userId: number): User?`
+Finds user by UserId.
+
+---
+
+### User (Server only – `require(ReplicatedStorage.SmartBlox.Types.Server.User)`)
+
+#### `User.new(player: Player, privilege: number, variables: {[string]: any}?)`
+Creates a new user (automatically called after successful login).
+
+#### `User:setVariable(key: string, value: any, isPublic: boolean?)`
+Sets a variable. If `isPublic`, it is broadcast to all clients.
+
+#### `User:getVariable(key: string): any`
+Returns a single variable.
+
+#### `User:getAllVariables(isSync: boolean?): {[string]: any}`
+Returns a copy of all variables.
+
+#### `User:getPublicVariables(): {[string]: any}`
+Returns only public variables.
 
 ---
 
@@ -114,7 +249,7 @@ The handler receives the player and the request object and should return a respo
 SmartBloxObject.new(rawData: table?) -> SmartBloxObject
 ```
 
-#### Putters (chainable)
+#### Putters (all chainable)
 - `putNull(key: string, value: nil)`
 - `putBool(key: string, value: boolean)`
 - `putByte(key: string, value: number)`
@@ -124,32 +259,28 @@ SmartBloxObject.new(rawData: table?) -> SmartBloxObject
 - `putFloat(key: string, value: number)`
 - `putDouble(key: string, value: number)`
 - `putUtfString(key: string, value: string)`
+- `putText(key: string, value: string)`
 - `putIntArray(key: string, value: {number})`
+- `putBoolArray(key: string, value: {boolean})`
+- `putByteArray(key: string, value: {number})`
+- `putShortArray(key: string, value: {number})`
+- `putLongArray(key: string, value: {number})`
+- `putFloatArray(key: string, value: {number})`
+- `putDoubleArray(key: string, value: {number})`
+- `putUtfStringArray(key: string, value: {string})`
 - `putSFSArray(key: string, value: SmartBloxArray)`
 - `putSFSObject(key: string, value: SmartBloxObject)`
-- `putText(key: string, value: string)`
+- `putClass(key: string, value: any)` *(throws error – not supported)*
 
-#### Getters
-- `getNull(key: string): nil`
-- `getBool(key: string): boolean?`
-- `getByte(key: string): number?`
-- `getShort(key: string): number?`
-- `getInt(key: string): number?`
-- `getLong(key: string): number?`
-- `getFloat(key: string): number?`
-- `getDouble(key: string): number?`
-- `getUtfString(key: string): string?`
-- `getText(key: string): string?`
-- `getIntArray(key: string): {number}?`
-- `getSFSObject(key: string): SmartBloxObject?`
-- `getSFSArray(key: string): SmartBloxArray?`
+#### Getters (return `nil` if missing/wrong type)
+All matching getters: `getNull`, `getBool`, `getByte`, ..., `getUtfString`, `getText`, `getIntArray`, `getBoolArray`, `getByteArray`, ..., `getUtfStringArray`, `getSFSArray`, `getSFSObject`.
 
-#### Utility Methods
+#### Utility
 - `containsKey(key: string): boolean`
 - `removeElement(key: string)`
 - `getKeys(): {string}`
 - `size(): number`
-- `getRawData(): table` — Returns the raw packed data
+- `getRawData(): table`
 
 ---
 
@@ -160,39 +291,32 @@ SmartBloxObject.new(rawData: table?) -> SmartBloxObject
 SmartBloxArray.new(rawListData: table?) -> SmartBloxArray
 ```
 
-#### Adders (chainable)
+#### Adders (all chainable)
+- `addNull()`
 - `addBool(value: boolean)`
 - `addByte(value: number)`
 - `addShort(value: number)`
 - `addInt(value: number)`
-- `addUtfString(value: string)`
-- `addSFSObject(value: SmartBloxObject)`
-- `addSFSArray(value: SmartBloxArray)`
-- `addNull()`
 - `addLong(value: number)`
 - `addFloat(value: number)`
 - `addDouble(value: number)`
+- `addUtfString(value: string)`
 - `addText(value: string)`
 - `addIntArray(value: {number})`
+- `addBoolArray(value: {boolean})`
+- `addByteArray(value: {number})`
+- `addShortArray(value: {number})`
+- `addLongArray(value: {number})`
+- `addFloatArray(value: {number})`
+- `addDoubleArray(value: {number})`
 - `addUtfStringArray(value: {string})`
+- `addSFSObject(value: SmartBloxObject)`
+- `addSFSArray(value: SmartBloxArray)`
 
-#### Getters
-- `getBool(index: number): boolean?`
-- `getByte(index: number): number?`
-- `getShort(index: number): number?`
-- `getInt(index: number): number?`
-- `getLong(index: number): number?`
-- `getFloat(index: number): number?`
-- `getDouble(index: number): number?`
-- `getText(index: number): string?`
-- `getIntArray(index: number): {number}?`
-- `getUtfStringArray(index: number): {string}?`
-- `getUtfString(index: number): string?`
-- `getSFSObject(index: number): SmartBloxObject?`
-- `getSFSArray(index: number): SmartBloxArray?`
-- `get(index: number): any` — Returns the raw value or wrapped object/array
+#### Getters (return `nil` if missing/wrong type)
+All matching getters: `getBool`, `getByte`, ..., `getText`, `getIntArray`, `getBoolArray`, ..., `getUtfStringArray`, `getSFSObject`, `getSFSArray`, plus generic `get(index: number): any`.
 
-#### Utility Methods
+#### Utility
 - `size(): number`
 - `removeElementAt(index: number)`
 - `getRawData(): table`
@@ -202,31 +326,13 @@ SmartBloxArray.new(rawListData: table?) -> SmartBloxArray
 
 ## Important Notes
 
-- **Nested objects/arrays** are fully supported (automatically wrapped into proper `SmartBloxObject` / `SmartBloxArray` instances).
-- All `get*` methods return `nil` if the key/index doesn't exist or has the wrong type.
-- `put*` and `add*` methods include runtime assertions for type safety (they will error in Studio if you pass wrong data).
-- The system uses the exact same type codes as SFS2X for maximum compatibility.
+- All `put*` / `add*` methods include runtime type assertions (errors in Studio on mismatch).
+- Nested SFSObjects and SFSArrays are automatically wrapped/unwrapped by the Serializer.
+- `get*` methods are type-safe and return `nil` for missing or wrong-type data.
+- The system uses the exact same type codes as SFS2X.
+- Login is **mandatory** — players are kicked if `USER_LOGIN` handler returns `false`.
+- Public user variables are automatically synced to all clients in real time.
+- `SYNC_USERS` is sent automatically after successful login.
 
----
-
-## Stress Testing & Production Readiness
-
-**This module has been heavily stress-tested** with the following scenarios:
-
-- 100+ rapid-fire requests (pings)
-- Deep nesting up to **50 levels**
-- Large payloads with **2000 items** in arrays (including long strings and numeric values)
-- Mixed nested objects + arrays
-- Edge cases: missing keys, wrong-type getters (correctly returns `nil`)
-
-All tests completed successfully with no serializer crashes, no assertion failures from the module, and stable callback behavior.  
-Round-trip times remained reasonable even under heavy load (0.17–0.35 seconds for large payloads in Studio).
-
-**Conclusion**: The core functionality (serializer, object/array system, RID callbacks, and single RemoteEvent handling) is stable and **ready for production use** in small to medium-sized games.
----
-
-**Made for Roblox** — Inspired by SmartFoxServer 2X.
-
-If you have any questions or want to contribute, open an issue or PR on GitHub!
-
-Happy building! 🚀
+**Made for Roblox** — Inspired by SmartFoxServer 2X.  
+Happy building!
