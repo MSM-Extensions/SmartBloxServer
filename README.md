@@ -10,14 +10,10 @@ SmartBlox brings the full SFSObject / SFSArray data model from SmartFoxServer 2X
 ## Features
 
 - Full SFSObject and SFSArray API (exact SFS2X naming & behavior)
-- **Expanded primitive array types**: `BoolArray`, `ByteArray`, `ShortArray`, `LongArray`, `FloatArray`, `DoubleArray`, `IntArray`, `UtfStringArray`
-- Automatic RID-based request/response callbacks (hidden from user)
 - Deeply nested objects and arrays (fully supported)
-- Built-in **User login system** with `USER_LOGIN` / `USER_DISCONNECT` / `SYNC_USERS`
 - User variable system with public/private sync (real-time updates to clients)
 - Serializer that packs/unpacks everything for the `RemoteEvent`
 - Zero external dependencies (pure Roblox Lua)
-- Debug logging built-in
 - Server and Client modules cleanly separated
 - Production-ready (heavily stress-tested with 100+ requests, 50-level nesting, 2000+ item arrays)
 
@@ -30,14 +26,14 @@ SmartBlox brings the full SFSObject / SFSArray data model from SmartFoxServer 2X
 
 ```lua
 local SmartBloxServer = require(ReplicatedStorage.SmartBlox.SmartBloxServer)
-SmartBloxServer.Init() -- optionally pass settings table
+SmartBloxServer.Init()
 ```
 
 3. On the **Client** (in a LocalScript):
 
 ```lua
 local SmartBloxClient = require(ReplicatedStorage.SmartBlox.SmartBloxClient)
-SmartBloxClient.Init() -- or SmartBloxClient.Init(true) for extra debug prints
+SmartBloxClient.Init()
 ```
 
 `SmartBloxServer.Init()` automatically creates the `SmartBloxEvent` RemoteEvent in ReplicatedStorage.
